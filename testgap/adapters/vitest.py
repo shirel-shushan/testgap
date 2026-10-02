@@ -31,6 +31,9 @@ class VitestAdapter(CoverageAdapter):
         # resolved repo root -> {repo-relative path: coverage entry}
         self._coverage: dict[Path, dict[str, dict]] = {}
 
+    def refresh(self) -> None:
+        self._coverage.clear()
+
     def _load(self, repo: str | Path) -> dict[str, dict]:
         root = Path(repo).resolve()
         if root not in self._coverage:

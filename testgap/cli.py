@@ -24,6 +24,13 @@ def cmd_run(args: argparse.Namespace) -> int:
     if not found:
         print("No gaps found.")
 
+    if args.generate:
+        from . import generator
+
+        for gap in found[: args.max_gaps]:
+            result = generator.process(gap, adapter, args.repo)
+            print(f"{gap.file} {gap.function} -> {result.status} ({result.attempts})")
+
     if args.report:
         print(f"note: --report not implemented yet; skipping {args.report}", file=sys.stderr)
     return 0
@@ -37,6 +44,8 @@ def build_parser() -> argparse.ArgumentParser:
     run.add_argument("--repo", required=True, help="path to the JavaScript repo")
     run.add_argument("--base", default="main", help="branch to diff against (default: main)")
     run.add_argument("--all", action="store_true", help="treat every uncovered line as changed")
+    run.add_argument("--generate", action="store_true", help="generate tests for the gaps")
+    run.add_argument("--max-gaps", type=int, default=3, help="max gaps to generate for (default: 3)")
     run.add_argument("--report", metavar="FILE", help="write a report to FILE")
     run.set_defaults(func=cmd_run)
     return parser

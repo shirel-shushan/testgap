@@ -1,7 +1,8 @@
 """Interface every test-runner coverage adapter implements."""
 
 from abc import ABC, abstractmethod
-from pathlib import Path
+import os
+from pathlib import Path, PurePosixPath
 
 
 class CoverageAdapter(ABC):
@@ -25,3 +26,22 @@ class CoverageAdapter(ABC):
     @abstractmethod
     def test_path_for(self, source_file: str, function: str) -> str:
         """Return the repo-relative path where a generated test should live."""
+
+    @abstractmethod
+    def refresh(self) -> None:
+        """Drop cached coverage so the next query re-runs the test suite."""
+
+    def import_path_for(self, test_path: str, source_file: str) -> str:
+        """Relative ESM import path from a test file to a source file."""
+        test_dir = PurePosixPath(test_path.replace("\\", "/")).parent
+        rel = os.path.relpath(source_file.replace("\\", "/"), start=test_dir).replace("\\", "/")
+        return rel if rel.startswith(".") else f"./{rel}"
+
+    def example_test(self, repo: str | Path) -> str:
+        """Contents of the first hand-written ``*.test.js`` under tests/, or ""."""
+        tests = Path(repo) / "tests"
+        generated = tests / "generated"
+        for path in sorted(tests.rglob("*.test.js")):
+            if generated not in path.parents:
+                return path.read_text(encoding="utf-8")
+        return ""
