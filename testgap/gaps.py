@@ -1,23 +1,34 @@
-"""Combine diff and coverage data into Gaps."""
-
 from .models import Gap
 
 
-def find_gaps(
-    changed: dict[str, set[int]],
-    uncovered: dict[str, set[int]],
-    functions: dict[str, list[tuple[str, int, int]]],
-) -> list[Gap]:
-    """Find functions whose changed lines are not covered by tests.
+def find_gaps(changed, uncovered, functions) -> list[Gap]:
+    gaps = []
 
-    Args:
-        changed: file -> changed line numbers (from ``diff.changed_lines``).
-        uncovered: file -> uncovered line numbers (from the coverage adapter).
-        functions: file -> list of (name, start_line, end_line) (from the
-            coverage adapter).
+    for file, lines in changed.items():
+        targets = lines & uncovered.get(file, set())
+        if not targets:
+            continue
 
-    Returns:
-        One Gap per function that contains at least one line that is both
-        changed and uncovered; ``Gap.lines`` holds those lines.
-    """
-    raise NotImplementedError
+        groups = {}
+        for line in targets:
+            owners = [
+                (name, start, end)
+                for name, start, end in functions.get(file, [])
+                if start <= line <= end
+            ]
+
+            if owners:
+                name, start, end = min(
+                    owners,
+                    key=lambda function: function[2] - function[1]
+                )
+            else:
+                name = "<module>"
+                start = end = line
+
+            groups.setdefault((name, start, end), set()).add(line)
+
+        for (name, start, end), group in groups.items():
+            gaps.append(Gap(file, name, start, end, group))
+
+    return sorted(gaps, key=lambda gap: (gap.file, gap.start_line))
