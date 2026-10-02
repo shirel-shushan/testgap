@@ -24,7 +24,6 @@ def ask(system: str, user: str, max_tokens: int = 4000) -> str:
     response = _get_client().messages.create(
         model=MODEL,
         max_tokens=max_tokens,
-        temperature=0,
         system=system,
         messages=[{"role": "user", "content": user}],
     )
