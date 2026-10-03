@@ -38,6 +38,13 @@ def test_low_confidence_is_not_a_bug(monkeypatch):
     assert _classify().is_code_bug is False
 
 
+def test_unclear_verdict_sets_is_unclear(monkeypatch):
+    _fake_llm(monkeypatch, json.dumps({"verdict": "unclear", "confidence": 0.3}))
+    verdict = _classify()
+    assert verdict.is_unclear is True
+    assert verdict.is_code_bug is False
+
+
 def test_invalid_json_is_not_a_bug(monkeypatch):
     _fake_llm(monkeypatch, "not json at all")
     assert _classify().is_code_bug is False

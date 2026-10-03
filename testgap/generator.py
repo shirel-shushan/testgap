@@ -19,6 +19,7 @@ class Verdict:
     is_code_bug: bool
     explanation: str = ""
     confidence: float | None = None
+    is_unclear: bool = False
 
 
 def _numbered(source: str) -> str:
@@ -74,16 +75,24 @@ def classify(gap, source, test_code, test_name, details, spec="", logger=None) -
 
     confidence = float(data.get("confidence", 0))
     is_bug = data.get("verdict") == "code_bug" and confidence >= CONFIDENCE_THRESHOLD
-    return Verdict(is_bug, str(data.get("explanation", "")), confidence)
+    is_unclear = data.get("verdict") == "unclear"
+    return Verdict(is_bug, str(data.get("explanation", "")), confidence, is_unclear)
 
 
-def _fix_instructions(skip: list[tuple[str, str]], fix: list[str]) -> str:
+def _fix_instructions(skip: list[tuple[str, str]], fix: list[str],
+                      ask: list[tuple[str, str]] | None = None) -> str:
     skip_list = "; ".join(f'"{name}" (explanation: {why})' for name, why in skip) or "(none)"
+    ask_part = ""
+    if ask:
+        ask_list = "; ".join(f'"{name}" (explanation: {why})' for name, why in ask)
+        ask_part = ("Also change these tests to it.skip with a comment above each: "
+                    f"// testgap: question - <explanation>: {ask_list}. ")
     fix_list = "; ".join(f'"{name}"' for name in fix) or "(none)"
     return (
         "\n\nInstructions for this fix:\n"
         "Change these tests to it.skip and add a comment above each: "
         f"// testgap: suspected bug - <explanation>: {skip_list}. "
+        f"{ask_part}"
         f"Fix these tests that are wrong: {fix_list}. "
         "Do not change any other test.\n"
     )
@@ -126,6 +135,7 @@ def process(gap, adapter, repo, logger=None) -> Result:
         return Result(gap, "gave_up", "", 0, "model output truncated")
 
     bugs: list[str] = []
+    questions: list[str] = []
     for attempt in range(1, MAX_ATTEMPTS + 1):
         test_path.parent.mkdir(parents=True, exist_ok=True)
         test_path.write_text(code, encoding="utf-8")
@@ -138,7 +148,7 @@ def process(gap, adapter, repo, logger=None) -> Result:
             adapter.refresh()
             still_missing = gap.lines & adapter.uncovered_lines(repo).get(gap.file, set())
             if not still_missing:
-                return Result(gap, "passed", code, attempt, bugs=bugs)
+                return Result(gap, "passed", code, attempt, bugs=bugs, questions=questions)
             feedback = f"Tests pass, but lines {sorted(still_missing)} are still not executed."
         else:
             names = failing_tests(output)[:MAX_CLASSIFIED]
@@ -151,18 +161,24 @@ def process(gap, adapter, repo, logger=None) -> Result:
             else:
                 details = failure_details(output)
                 skip: list[tuple[str, str]] = []
+                ask: list[tuple[str, str]] = []
                 fix: list[str] = []
                 for name in names:
                     verdict = classify(gap, source, code, name, details.get(name, ""), spec, logger)
                     logger.verdict(verdict, name)
-                    if verdict.is_code_bug:
+                    if verdict.is_unclear:
+                        entry = f"{name}: {verdict.explanation}"
+                        if entry not in questions:
+                            questions.append(entry)
+                        ask.append((name, verdict.explanation))
+                    elif verdict.is_code_bug:
                         entry = f"{name}: {verdict.explanation}"
                         if entry not in bugs:
                             bugs.append(entry)
                         skip.append((name, verdict.explanation))
                     else:
                         fix.append(name)
-                feedback = output[-3000:] + _fix_instructions(skip, fix)
+                feedback = output[-3000:] + _fix_instructions(skip, fix, ask)
 
         try:
             code = _ask_code(
@@ -172,7 +188,7 @@ def process(gap, adapter, repo, logger=None) -> Result:
             )
         except llm.TruncatedResponse:
             test_path.unlink(missing_ok=True)
-            return Result(gap, "gave_up", code, attempt, "model output truncated", bugs=bugs)
+            return Result(gap, "gave_up", code, attempt, "model output truncated", bugs=bugs, questions=questions)
 
     test_path.unlink(missing_ok=True)
-    return Result(gap, "gave_up", code, MAX_ATTEMPTS, bugs=bugs)
+    return Result(gap, "gave_up", code, MAX_ATTEMPTS, bugs=bugs, questions=questions)

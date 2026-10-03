@@ -24,3 +24,4 @@ class Result:
     attempts: int = 0
     explanation: str = ""
     bugs: list[str] = field(default_factory=list)
+    questions: list[str] = field(default_factory=list)

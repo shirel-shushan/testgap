@@ -115,7 +115,7 @@ class RunLogger(NullLogger):
 
     def verdict(self, verdict, name=""):
         if verdict.confidence is not None:
-            label = "code_bug" if verdict.is_code_bug else "not a bug"
+            label = "unclear" if verdict.is_unclear else "code_bug" if verdict.is_code_bug else "not a bug"
             self.echo(f"      verdict for {name}: {label} (confidence {verdict.confidence})")
 
     def truncated(self):

@@ -33,6 +33,8 @@ def cmd_run(args: argparse.Namespace) -> int:
             print(f"{gap.file} {gap.function} -> {result.status} ({result.attempts})")
             for bug in result.bugs:
                 print(f"    BUG? {bug}")
+            for question in result.questions:
+                print(f"    QUESTION? {question}")
 
     if args.report:
         print(f"note: --report not implemented yet; skipping {args.report}", file=sys.stderr)

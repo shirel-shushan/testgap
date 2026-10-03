@@ -52,6 +52,28 @@ def test_code_bug_skipped_and_wrong_test_fixed(tmp_path, monkeypatch):
     assert result.bugs == ["bad sum: subtracts"]
 
 
+def test_unclear_goes_to_questions_and_skip_not_bugs(tmp_path, monkeypatch):
+    (tmp_path / "src").mkdir()
+    (tmp_path / "src" / "a.js").write_text("function add(a, b) {\n  return a - b;\n}\n")
+    fix_msgs = []
+
+    def ask(system, msg, **kw):
+        if system == generator.prompts.load("classify"):
+            return json.dumps({"verdict": "unclear", "confidence": 0.4, "explanation": "is 0 allowed?"})
+        if system == generator.prompts.load("fix"):
+            fix_msgs.append(msg)
+        return "```javascript\ntest()\n```"
+
+    monkeypatch.setattr(generator.llm, "ask", ask)
+    result = generator.process(GAP, FakeAdapter(), tmp_path)
+
+    assert result.bugs == []
+    assert result.questions == ["bad sum: is 0 allowed?", "bad import: is 0 allowed?"]
+    skip_part = fix_msgs[0].split("Fix these tests that are wrong:")[0]
+    assert "// testgap: question - <explanation>" in skip_part
+    assert '"bad sum"' in skip_part and '"bad import"' in skip_part
+
+
 def _ok_adapter():
     a = FakeAdapter()
     a.runs = [(True, "ok")]
