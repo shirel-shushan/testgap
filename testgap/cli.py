@@ -30,6 +30,8 @@ def cmd_run(args: argparse.Namespace) -> int:
         for gap in found[: args.max_gaps]:
             result = generator.process(gap, adapter, args.repo)
             print(f"{gap.file} {gap.function} -> {result.status} ({result.attempts})")
+            if result.status == "suspected_bug":
+                print(f"    {result.explanation}")
 
     if args.report:
         print(f"note: --report not implemented yet; skipping {args.report}", file=sys.stderr)

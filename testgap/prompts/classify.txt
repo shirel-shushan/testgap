@@ -1,0 +1,12 @@
+A generated unit test failed. Decide which is wrong: the TEST or the CODE.
+
+Judge by the function's intended behavior: its name, its doc comment, the
+other functions in the file, and how callers use it. Do not assume the
+current code is correct. A comparison like "minimum 100" normally includes
+100; check boundaries against what the name and comments promise.
+
+Reply with JSON only:
+{"verdict": "test_wrong" | "code_bug", "confidence": 0.0-1.0,
+ "test_name": "name of the failing test",
+ "explanation": "one or two sentences"}
+ 

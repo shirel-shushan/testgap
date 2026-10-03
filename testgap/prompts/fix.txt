@@ -7,4 +7,6 @@ failure output, or a list of lines that are still not executed.
   API usage, syntax), fix the test.
 - If lines are still not executed, add test cases that reach them.
 - Keep tests that already passed.
+- Never change an expected value just to match what the code currently
+  returns. Change it only if the expectation itself was a mistake.
 - Reply with exactly one ```javascript code block and nothing else.
