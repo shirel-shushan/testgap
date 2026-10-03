@@ -24,6 +24,10 @@ class CoverageAdapter(ABC):
         """Run a single test file; return (passed, combined output)."""
 
     @abstractmethod
+    def run_existing_suite(self, repo: str | Path) -> tuple[bool, str]:
+        """Run the hand-written tests (excluding generated ones); return (passed, output)."""
+
+    @abstractmethod
     def test_path_for(self, source_file: str, function: str) -> str:
         """Return the repo-relative path where a generated test should live."""
 

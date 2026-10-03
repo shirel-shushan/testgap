@@ -2,6 +2,7 @@
 
 import argparse
 import sys
+from pathlib import Path
 
 from . import diff, gaps
 from .adapters import VitestAdapter
@@ -38,6 +39,19 @@ def cmd_run(args: argparse.Namespace) -> int:
                 print(f"    BUG? {bug}")
             for question in result.questions:
                 print(f"    QUESTION? {question}")
+            if args.suggest_fixes and result.bugs:
+                from . import fixer
+
+                source = (Path(args.repo) / gap.file).read_text(encoding="utf-8")
+                for bug in result.bugs:
+                    fix = fixer.suggest_fix(gap, source, bug, result.test_code, adapter, args.repo)
+                    if fix is None:
+                        continue
+                    result.fixes.append(fix)
+                    label = "verified" if fix["verified"] else "not verified"
+                    print(f"    FIX ({label}):")
+                    for line in fix["diff"].splitlines():
+                        print(f"      {line}")
 
     if args.report:
         print(f"note: --report not implemented yet; skipping {args.report}", file=sys.stderr)
@@ -55,6 +69,8 @@ def build_parser() -> argparse.ArgumentParser:
     run.add_argument("--generate", action="store_true", help="generate tests for the gaps")
     run.add_argument("--verbose", action="store_true",
                      help="with --generate, save specs/tests/outputs to <repo>/.testgap/runs and print per-attempt details")
+    run.add_argument("--suggest-fixes", action="store_true",
+                     help="with --generate, suggest a fix for each bug and verify it by running the tests")
     run.add_argument("--max-gaps", type=int, default=3, help="max gaps to generate for (default: 3)")
     run.add_argument("--only", metavar="NAME[,NAME...]",
                      help="only process gaps whose function name is in this comma-separated list")

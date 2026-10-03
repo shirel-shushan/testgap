@@ -86,6 +86,14 @@ class VitestAdapter(CoverageAdapter):
             return False, f"timed out after {TIMEOUT}s\n{e.stdout or ''}{e.stderr or ''}"
         return proc.returncode == 0, proc.stdout + proc.stderr
 
+    def run_existing_suite(self, repo: str | Path) -> tuple[bool, str]:
+        cmd = ["npx", "vitest", "run", "--exclude", "tests/generated/**"]
+        try:
+            proc = _run(cmd, Path(repo).resolve())
+        except subprocess.TimeoutExpired as e:
+            return False, f"timed out after {TIMEOUT}s\n{e.stdout or ''}{e.stderr or ''}"
+        return proc.returncode == 0, proc.stdout + proc.stderr
+
     def test_path_for(self, source_file: str, function: str) -> str:
         stem = PurePosixPath(source_file.replace("\\", "/")).stem
         return f"tests/generated/{stem}.{function}.test.js"
