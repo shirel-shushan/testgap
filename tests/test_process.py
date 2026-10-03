@@ -4,6 +4,7 @@ from testgap import generator
 from testgap.models import Gap
 
 GAP = Gap("src/a.js", "add", 1, 3, {2})
+SUBTRACT_SRC = "function add(a, b) {\n  return a - b;\n}\n\n\n// spec: result is a - b?\n"
 FAIL_OUTPUT = """\
  FAIL  t.test.js > add > bad sum
 AssertionError: expected 3 to be 4
@@ -28,7 +29,7 @@ class FakeAdapter:
 
 def test_code_bug_skipped_and_wrong_test_fixed(tmp_path, monkeypatch):
     (tmp_path / "src").mkdir()
-    (tmp_path / "src" / "a.js").write_text("function add(a, b) {\n  return a - b;\n}\n")
+    (tmp_path / "src" / "a.js").write_text(SUBTRACT_SRC)
     fix_msgs = []
 
     def ask(system, msg, **kw):
@@ -36,7 +37,7 @@ def test_code_bug_skipped_and_wrong_test_fixed(tmp_path, monkeypatch):
             bug = "bad sum" in msg.split("Classify only this one failing test:")[1].splitlines()[0]
             return json.dumps({"verdict": "code_bug" if bug else "test_wrong",
                                "confidence": 0.9, "explanation": "subtracts",
-                               "evidence": "return a - b;", "line": 2})
+                               "evidence": "a - b", "line": 2})
         if system == generator.prompts.load("fix"):
             fix_msgs.append(msg)
         return "```javascript\ntest()\n```"
@@ -55,7 +56,7 @@ def test_code_bug_skipped_and_wrong_test_fixed(tmp_path, monkeypatch):
 
 def test_unclear_goes_to_questions_and_skip_not_bugs(tmp_path, monkeypatch):
     (tmp_path / "src").mkdir()
-    (tmp_path / "src" / "a.js").write_text("function add(a, b) {\n  return a - b;\n}\n")
+    (tmp_path / "src" / "a.js").write_text(SUBTRACT_SRC)
     fix_msgs = []
 
     def ask(system, msg, **kw):
@@ -77,7 +78,7 @@ def test_unclear_goes_to_questions_and_skip_not_bugs(tmp_path, monkeypatch):
 
 def _subtract_src(tmp_path):
     (tmp_path / "src").mkdir()
-    (tmp_path / "src" / "a.js").write_text("function add(a, b) {\n  return a - b;\n}\n")
+    (tmp_path / "src" / "a.js").write_text(SUBTRACT_SRC)
 
 
 def test_two_code_bugs_on_same_line_give_one_bug(tmp_path, monkeypatch):
@@ -87,7 +88,7 @@ def test_two_code_bugs_on_same_line_give_one_bug(tmp_path, monkeypatch):
         if system == generator.prompts.load("classify"):
             name = msg.split("Classify only this one failing test:")[1].splitlines()[0].strip()
             return json.dumps({"verdict": "code_bug", "confidence": 0.9, "explanation": f"why {name}",
-                               "evidence": "return a - b;", "line": 2})
+                               "evidence": "a - b", "line": 2})
         return "```javascript\ntest()\n```"
 
     monkeypatch.setattr(generator.llm, "ask", ask)
@@ -101,12 +102,54 @@ def test_code_bug_without_line_deduped_by_explanation(tmp_path, monkeypatch):
     def ask(system, msg, **kw):
         if system == generator.prompts.load("classify"):
             return json.dumps({"verdict": "code_bug", "confidence": 0.9, "explanation": "same",
-                               "evidence": "return a - b;"})
+                               "evidence": "a - b"})
         return "```javascript\ntest()\n```"
 
     monkeypatch.setattr(generator.llm, "ask", ask)
     result = generator.process(GAP, FakeAdapter(), tmp_path)
     assert len(result.bugs) == 1
+
+
+def _run_with(tmp_path, monkeypatch, replies):
+    """Run process() on the subtract source; replies maps test name -> classifier JSON dict."""
+    _subtract_src(tmp_path)
+
+    def ask(system, msg, **kw):
+        if system == generator.prompts.load("classify"):
+            name = msg.split("Classify only this one failing test:")[1].splitlines()[0].strip()
+            return json.dumps(replies[name])
+        return "```javascript\ntest()\n```"
+
+    monkeypatch.setattr(generator.llm, "ask", ask)
+    return generator.process(GAP, FakeAdapter(), tmp_path)
+
+
+BUG = {"verdict": "code_bug", "confidence": 0.9, "explanation": "pads with `padEnd`",
+       "evidence": "a - b", "line": 2}
+
+
+def test_question_on_same_line_as_bug_is_dropped(tmp_path, monkeypatch):
+    q = {"verdict": "unclear", "confidence": 0.3, "explanation": "unsure", "line": 2}
+    result = _run_with(tmp_path, monkeypatch, {"bad sum": BUG, "bad import": q})
+    assert len(result.bugs) == 1 and result.questions == []
+
+
+def test_lineless_question_sharing_backticked_token_with_bug_is_dropped(tmp_path, monkeypatch):
+    q = {"verdict": "unclear", "confidence": 0.3, "explanation": "is `padEnd` right?"}
+    result = _run_with(tmp_path, monkeypatch, {"bad sum": BUG, "bad import": q})
+    assert len(result.bugs) == 1 and result.questions == []
+
+
+def test_unrelated_question_is_kept(tmp_path, monkeypatch):
+    q = {"verdict": "unclear", "confidence": 0.3, "explanation": "is `trim` right?", "line": 5}
+    result = _run_with(tmp_path, monkeypatch, {"bad sum": BUG, "bad import": q})
+    assert len(result.bugs) == 1 and len(result.questions) == 1
+
+
+def test_question_before_bug_is_still_dropped(tmp_path, monkeypatch):
+    q = {"verdict": "unclear", "confidence": 0.3, "explanation": "unsure", "line": 2}
+    result = _run_with(tmp_path, monkeypatch, {"bad sum": q, "bad import": BUG})
+    assert len(result.bugs) == 1 and result.questions == []
 
 
 def _ok_adapter():

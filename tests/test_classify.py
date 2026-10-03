@@ -4,10 +4,11 @@ from testgap import generator
 from testgap.models import Gap
 
 GAP = Gap("src/a.js", "add", 1, 3, {2})
+SOURCE = "function add(a, b) {\n  return a - b;\n}\n\n\n// a - b is wrong\n"
 
 
 def _classify(details="AssertionError: expected 1 to be 2"):
-    return generator.classify(GAP, "function add(a, b) {}", "test()", "adds", details, "spec")
+    return generator.classify(GAP, SOURCE, "test()", "adds", details, "spec")
 
 
 def _fake_llm(monkeypatch, reply):
@@ -30,10 +31,10 @@ def test_syntax_error_skips_llm(monkeypatch):
 
 def test_code_bug_with_high_confidence(monkeypatch):
     _fake_llm(monkeypatch, json.dumps({"verdict": "code_bug", "confidence": 0.9,
-                                       "evidence": "function add(a, b)", "line": 1}))
+                                       "evidence": "a - b", "line": 2}))
     verdict = _classify()
     assert verdict.is_code_bug is True
-    assert verdict.line == 1
+    assert verdict.line == 2
 
 
 def test_code_bug_with_evidence_not_in_source_becomes_unclear(monkeypatch):
@@ -43,6 +44,20 @@ def test_code_bug_with_evidence_not_in_source_becomes_unclear(monkeypatch):
     assert verdict.is_code_bug is False
     assert verdict.is_unclear is True
     assert verdict.explanation.endswith("(no evidence in file)")
+
+
+def test_evidence_only_on_the_faulty_line_becomes_unclear(monkeypatch):
+    for line in (2, 3, 1):  # the faulty line itself or one line off
+        _fake_llm(monkeypatch, json.dumps({"verdict": "code_bug", "confidence": 0.9,
+                                           "evidence": "return a - b;", "line": line}))
+        verdict = _classify()
+        assert verdict.is_code_bug is False and verdict.is_unclear is True
+        assert verdict.explanation.endswith("(evidence is the faulty line itself)")
+
+
+def test_evidence_without_line_is_accepted(monkeypatch):
+    _fake_llm(monkeypatch, json.dumps({"verdict": "code_bug", "confidence": 0.9, "evidence": "return a - b;"}))
+    assert _classify().is_code_bug is True
 
 
 def test_code_bug_without_evidence_becomes_unclear(monkeypatch):

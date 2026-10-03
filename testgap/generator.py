@@ -50,13 +50,34 @@ def write_spec(gap, source) -> str:
     return llm.ask(prompts.load("spec"), msg, max_tokens=1500)
 
 
-def _in_source(evidence, source) -> bool:
-    """True if the evidence appears verbatim on one line of the source (whitespace ignored)."""
+def _evidence_lines(evidence, source) -> list[int]:
+    """1-based numbers of the source lines containing the evidence (whitespace ignored)."""
     def squash(text):
         return re.sub(r"\s+", "", text)
 
     needle = squash(evidence)
-    return bool(needle) and any(needle in squash(line) for line in source.splitlines())
+    if not needle:
+        return []
+    return [i for i, line in enumerate(source.splitlines(), 1) if needle in squash(line)]
+
+
+def _backticked(text: str) -> set[str]:
+    return set(re.findall(r"`([^`]+)`", text))
+
+
+def _prune_questions(bugs: list["Verdict"], questions: list[tuple[str, "Verdict"]]) -> list[str]:
+    """Drop questions that restate a bug: same line, or (no line) a shared `quoted` identifier."""
+    bug_lines = {b.line for b in bugs if b.line is not None}
+    bug_tokens = set().union(*(_backticked(b.explanation) for b in bugs)) if bugs else set()
+    kept = []
+    for entry, verdict in questions:
+        if verdict.line is not None:
+            if verdict.line in bug_lines:
+                continue
+        elif _backticked(verdict.explanation) & bug_tokens:
+            continue
+        kept.append(entry)
+    return kept
 
 
 def _dedupe_key(gap, verdict: Verdict):
@@ -93,11 +114,16 @@ def classify(gap, source, test_code, test_name, details, spec="", logger=None) -
     kind = data.get("verdict")
     explanation = str(data.get("explanation", ""))
     evidence = data.get("evidence")
-    if kind == "code_bug" and not (isinstance(evidence, str) and _in_source(evidence, source)):
-        kind = "unclear"
-        explanation += " (no evidence in file)"
     line = data.get("line")
     line = line if isinstance(line, int) and not isinstance(line, bool) else None
+    if kind == "code_bug":
+        found = _evidence_lines(evidence, source) if isinstance(evidence, str) else []
+        if not found:
+            kind = "unclear"
+            explanation += " (no evidence in file)"
+        elif line is not None and all(abs(n - line) <= 1 for n in found):
+            kind = "unclear"
+            explanation += " (evidence is the faulty line itself)"
     is_bug = kind == "code_bug" and confidence >= CONFIDENCE_THRESHOLD
     return Verdict(is_bug, explanation, confidence, kind == "unclear", line)
 
@@ -158,7 +184,8 @@ def process(gap, adapter, repo, logger=None) -> Result:
         return Result(gap, "gave_up", "", 0, "model output truncated")
 
     bugs: list[str] = []
-    questions: list[str] = []
+    bug_verdicts: list[Verdict] = []
+    questions: list[tuple[str, Verdict]] = []
     seen_bugs: set = set()
     seen_questions: set = set()
     for attempt in range(1, MAX_ATTEMPTS + 1):
@@ -173,7 +200,7 @@ def process(gap, adapter, repo, logger=None) -> Result:
             adapter.refresh()
             still_missing = gap.lines & adapter.uncovered_lines(repo).get(gap.file, set())
             if not still_missing:
-                return Result(gap, "passed", code, attempt, bugs=bugs, questions=questions)
+                return Result(gap, "passed", code, attempt, bugs=bugs, questions=_prune_questions(bug_verdicts, questions))
             feedback = f"Tests pass, but lines {sorted(still_missing)} are still not executed."
         else:
             names = failing_tests(output)[:MAX_CLASSIFIED]
@@ -196,7 +223,7 @@ def process(gap, adapter, repo, logger=None) -> Result:
                         key = _dedupe_key(gap, verdict)
                         if key not in seen_questions:
                             seen_questions.add(key)
-                            questions.append(entry)
+                            questions.append((entry, verdict))
                         ask.append((name, verdict.explanation))
                     elif verdict.is_code_bug:
                         entry = f"{name}: {verdict.explanation}"
@@ -204,6 +231,7 @@ def process(gap, adapter, repo, logger=None) -> Result:
                         if key not in seen_bugs:
                             seen_bugs.add(key)
                             bugs.append(entry)
+                            bug_verdicts.append(verdict)
                         skip.append((name, verdict.explanation))
                     else:
                         fix.append(name)
@@ -217,7 +245,7 @@ def process(gap, adapter, repo, logger=None) -> Result:
             )
         except llm.TruncatedResponse:
             test_path.unlink(missing_ok=True)
-            return Result(gap, "gave_up", code, attempt, "model output truncated", bugs=bugs, questions=questions)
+            return Result(gap, "gave_up", code, attempt, "model output truncated", bugs=bugs, questions=_prune_questions(bug_verdicts, questions))
 
     test_path.unlink(missing_ok=True)
-    return Result(gap, "gave_up", code, MAX_ATTEMPTS, bugs=bugs, questions=questions)
+    return Result(gap, "gave_up", code, MAX_ATTEMPTS, bugs=bugs, questions=_prune_questions(bug_verdicts, questions))
