@@ -1,5 +1,6 @@
 """Generate, run and validate tests for a single Gap."""
 import json
+import re
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -20,6 +21,7 @@ class Verdict:
     explanation: str = ""
     confidence: float | None = None
     is_unclear: bool = False
+    line: int | None = None
 
 
 def _numbered(source: str) -> str:
@@ -48,6 +50,20 @@ def write_spec(gap, source) -> str:
     return llm.ask(prompts.load("spec"), msg, max_tokens=1500)
 
 
+def _in_source(evidence, source) -> bool:
+    """True if the evidence appears verbatim on one line of the source (whitespace ignored)."""
+    def squash(text):
+        return re.sub(r"\s+", "", text)
+
+    needle = squash(evidence)
+    return bool(needle) and any(needle in squash(line) for line in source.splitlines())
+
+
+def _dedupe_key(gap, verdict: Verdict):
+    """One report per (function, line); without a line, per explanation text."""
+    return (gap.function, verdict.line if verdict.line is not None else verdict.explanation)
+
+
 def classify(gap, source, test_code, test_name, details, spec="", logger=None) -> Verdict:
     """Decide whether one failing test exposes a bug in the code."""
     if any(marker in details for marker in TEST_BROKEN):
@@ -74,9 +90,16 @@ def classify(gap, source, test_code, test_name, details, spec="", logger=None) -
         return Verdict(False)
 
     confidence = float(data.get("confidence", 0))
-    is_bug = data.get("verdict") == "code_bug" and confidence >= CONFIDENCE_THRESHOLD
-    is_unclear = data.get("verdict") == "unclear"
-    return Verdict(is_bug, str(data.get("explanation", "")), confidence, is_unclear)
+    kind = data.get("verdict")
+    explanation = str(data.get("explanation", ""))
+    evidence = data.get("evidence")
+    if kind == "code_bug" and not (isinstance(evidence, str) and _in_source(evidence, source)):
+        kind = "unclear"
+        explanation += " (no evidence in file)"
+    line = data.get("line")
+    line = line if isinstance(line, int) and not isinstance(line, bool) else None
+    is_bug = kind == "code_bug" and confidence >= CONFIDENCE_THRESHOLD
+    return Verdict(is_bug, explanation, confidence, kind == "unclear", line)
 
 
 def _fix_instructions(skip: list[tuple[str, str]], fix: list[str],
@@ -136,6 +159,8 @@ def process(gap, adapter, repo, logger=None) -> Result:
 
     bugs: list[str] = []
     questions: list[str] = []
+    seen_bugs: set = set()
+    seen_questions: set = set()
     for attempt in range(1, MAX_ATTEMPTS + 1):
         test_path.parent.mkdir(parents=True, exist_ok=True)
         test_path.write_text(code, encoding="utf-8")
@@ -168,12 +193,16 @@ def process(gap, adapter, repo, logger=None) -> Result:
                     logger.verdict(verdict, name)
                     if verdict.is_unclear:
                         entry = f"{name}: {verdict.explanation}"
-                        if entry not in questions:
+                        key = _dedupe_key(gap, verdict)
+                        if key not in seen_questions:
+                            seen_questions.add(key)
                             questions.append(entry)
                         ask.append((name, verdict.explanation))
                     elif verdict.is_code_bug:
                         entry = f"{name}: {verdict.explanation}"
-                        if entry not in bugs:
+                        key = _dedupe_key(gap, verdict)
+                        if key not in seen_bugs:
+                            seen_bugs.add(key)
                             bugs.append(entry)
                         skip.append((name, verdict.explanation))
                     else:

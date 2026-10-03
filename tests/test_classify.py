@@ -29,12 +29,30 @@ def test_syntax_error_skips_llm(monkeypatch):
 
 
 def test_code_bug_with_high_confidence(monkeypatch):
+    _fake_llm(monkeypatch, json.dumps({"verdict": "code_bug", "confidence": 0.9,
+                                       "evidence": "function add(a, b)", "line": 1}))
+    verdict = _classify()
+    assert verdict.is_code_bug is True
+    assert verdict.line == 1
+
+
+def test_code_bug_with_evidence_not_in_source_becomes_unclear(monkeypatch):
+    _fake_llm(monkeypatch, json.dumps({"verdict": "code_bug", "confidence": 0.9,
+                                       "evidence": "return a * b;", "explanation": "x"}))
+    verdict = _classify()
+    assert verdict.is_code_bug is False
+    assert verdict.is_unclear is True
+    assert verdict.explanation.endswith("(no evidence in file)")
+
+
+def test_code_bug_without_evidence_becomes_unclear(monkeypatch):
     _fake_llm(monkeypatch, json.dumps({"verdict": "code_bug", "confidence": 0.9}))
-    assert _classify().is_code_bug is True
+    verdict = _classify()
+    assert verdict.is_code_bug is False and verdict.is_unclear is True
 
 
 def test_low_confidence_is_not_a_bug(monkeypatch):
-    _fake_llm(monkeypatch, json.dumps({"verdict": "code_bug", "confidence": 0.5}))
+    _fake_llm(monkeypatch, json.dumps({"verdict": "code_bug", "confidence": 0.5, "evidence": "function add"}))
     assert _classify().is_code_bug is False
 
 

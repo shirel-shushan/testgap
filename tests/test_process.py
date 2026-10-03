@@ -35,7 +35,8 @@ def test_code_bug_skipped_and_wrong_test_fixed(tmp_path, monkeypatch):
         if system == generator.prompts.load("classify"):
             bug = "bad sum" in msg.split("Classify only this one failing test:")[1].splitlines()[0]
             return json.dumps({"verdict": "code_bug" if bug else "test_wrong",
-                               "confidence": 0.9, "explanation": "subtracts"})
+                               "confidence": 0.9, "explanation": "subtracts",
+                               "evidence": "return a - b;", "line": 2})
         if system == generator.prompts.load("fix"):
             fix_msgs.append(msg)
         return "```javascript\ntest()\n```"
@@ -68,10 +69,44 @@ def test_unclear_goes_to_questions_and_skip_not_bugs(tmp_path, monkeypatch):
     result = generator.process(GAP, FakeAdapter(), tmp_path)
 
     assert result.bugs == []
-    assert result.questions == ["bad sum: is 0 allowed?", "bad import: is 0 allowed?"]
+    assert result.questions == ["bad sum: is 0 allowed?"]  # same explanation, no line: deduped
     skip_part = fix_msgs[0].split("Fix these tests that are wrong:")[0]
     assert "// testgap: question - <explanation>" in skip_part
     assert '"bad sum"' in skip_part and '"bad import"' in skip_part
+
+
+def _subtract_src(tmp_path):
+    (tmp_path / "src").mkdir()
+    (tmp_path / "src" / "a.js").write_text("function add(a, b) {\n  return a - b;\n}\n")
+
+
+def test_two_code_bugs_on_same_line_give_one_bug(tmp_path, monkeypatch):
+    _subtract_src(tmp_path)
+
+    def ask(system, msg, **kw):
+        if system == generator.prompts.load("classify"):
+            name = msg.split("Classify only this one failing test:")[1].splitlines()[0].strip()
+            return json.dumps({"verdict": "code_bug", "confidence": 0.9, "explanation": f"why {name}",
+                               "evidence": "return a - b;", "line": 2})
+        return "```javascript\ntest()\n```"
+
+    monkeypatch.setattr(generator.llm, "ask", ask)
+    result = generator.process(GAP, FakeAdapter(), tmp_path)
+    assert len(result.bugs) == 1
+
+
+def test_code_bug_without_line_deduped_by_explanation(tmp_path, monkeypatch):
+    _subtract_src(tmp_path)
+
+    def ask(system, msg, **kw):
+        if system == generator.prompts.load("classify"):
+            return json.dumps({"verdict": "code_bug", "confidence": 0.9, "explanation": "same",
+                               "evidence": "return a - b;"})
+        return "```javascript\ntest()\n```"
+
+    monkeypatch.setattr(generator.llm, "ask", ask)
+    result = generator.process(GAP, FakeAdapter(), tmp_path)
+    assert len(result.bugs) == 1
 
 
 def _ok_adapter():

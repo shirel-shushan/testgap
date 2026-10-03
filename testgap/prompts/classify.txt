@@ -7,9 +7,18 @@ Do not assume the current code is correct.
 
 Verdicts:
 - "code_bug": only when the code clearly contradicts what its name, doc comment, other code in the same file, or its callers promise.
-- "unclear": when a reasonable developer could intend either behavior (business rules such as whether 0 is allowed, inclusive vs exclusive time limits, rounding), and nothing in the file settles it.
+- "unclear": when the only support for a bug is the SPEC, or when a reasonable developer could intend either behavior (business rules such as whether 0 is allowed, inclusive vs exclusive time limits, rounding), and nothing in the file settles it.
 - "test_wrong": the test itself is mistaken.
+
+Rule: if the only support for "code_bug" is the SPEC, the verdict must be "unclear".
+The SPEC is a guess and may invent business rules.
+
+For "code_bug" you must quote evidence from the SOURCE FILE: a doc comment, other code in the
+file, or a caller, that the current code contradicts. The quote must be exact (a full line or a
+substring of one line, without the line-number prefix). Also give the line number of the faulty code.
 
 Reply with JSON only:
 {"verdict": "test_wrong" | "code_bug" | "unclear", "confidence": 0.0-1.0,
- "explanation": "one or two sentences"}
+ "explanation": "one or two sentences",
+ "evidence": "exact quote from the source file (required for code_bug)",
+ "line": line number of the faulty code}

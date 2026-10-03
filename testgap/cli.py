@@ -18,6 +18,9 @@ def cmd_run(args: argparse.Namespace) -> int:
         changed = diff.changed_lines(args.repo, args.base)
 
     found = gaps.find_gaps(changed, uncovered, functions)
+    if args.only:
+        wanted = {name.strip() for name in args.only.split(",") if name.strip()}
+        found = [gap for gap in found if gap.function in wanted]
     for gap in found:
         lines = ",".join(str(n) for n in sorted(gap.lines))
         print(f"{gap.file}:{gap.start_line}-{gap.end_line} {gap.function} -> {lines}")
@@ -53,6 +56,8 @@ def build_parser() -> argparse.ArgumentParser:
     run.add_argument("--verbose", action="store_true",
                      help="with --generate, save specs/tests/outputs to <repo>/.testgap/runs and print per-attempt details")
     run.add_argument("--max-gaps", type=int, default=3, help="max gaps to generate for (default: 3)")
+    run.add_argument("--only", metavar="NAME[,NAME...]",
+                     help="only process gaps whose function name is in this comma-separated list")
     run.add_argument("--report", metavar="FILE", help="write a report to FILE")
     run.set_defaults(func=cmd_run)
     return parser
