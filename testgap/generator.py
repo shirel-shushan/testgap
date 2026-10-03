@@ -61,6 +61,25 @@ def _evidence_lines(evidence, source) -> list[int]:
     return [i for i, line in enumerate(source.splitlines(), 1) if needle in squash(line)]
 
 
+MIN_QUOTE_LEN = 12
+
+
+def _evidence_candidates(evidence: str) -> list[str]:
+    """The whole evidence plus every quoted substring (' " or `) of at least MIN_QUOTE_LEN chars."""
+    quoted = re.findall(r"'([^']+)'|\"([^\"]+)\"|`([^`]+)`", evidence)
+    parts = [q for group in quoted for q in group if len(q) >= MIN_QUOTE_LEN]
+    return [evidence, *parts]
+
+
+def _evidence_found(evidence, source, line) -> bool:
+    """True if some candidate appears on a source line other than the reported one (+-1)."""
+    for candidate in _evidence_candidates(evidence):
+        for n in _evidence_lines(candidate, source):
+            if line is None or abs(n - line) > 1:
+                return True
+    return False
+
+
 def _backticked(text: str) -> set[str]:
     return set(re.findall(r"`([^`]+)`", text))
 
@@ -117,11 +136,11 @@ def classify(gap, source, test_code, test_name, details, spec="", logger=None) -
     line = data.get("line")
     line = line if isinstance(line, int) and not isinstance(line, bool) else None
     if kind == "code_bug":
-        found = _evidence_lines(evidence, source) if isinstance(evidence, str) else []
-        if not found:
+        text = evidence if isinstance(evidence, str) else ""
+        if not any(_evidence_lines(c, source) for c in _evidence_candidates(text)):
             kind = "unclear"
             explanation += " (no evidence in file)"
-        elif line is not None and all(abs(n - line) <= 1 for n in found):
+        elif not _evidence_found(text, source, line):
             kind = "unclear"
             explanation += " (evidence is the faulty line itself)"
     is_bug = kind == "code_bug" and confidence >= CONFIDENCE_THRESHOLD

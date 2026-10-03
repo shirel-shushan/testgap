@@ -13,9 +13,15 @@ Verdicts:
 Rule: if the only support for "code_bug" is the SPEC, the verdict must be "unclear".
 The SPEC is a guess and may invent business rules.
 
-For "code_bug" you must quote evidence from the SOURCE FILE: a doc comment, other code in the
-file, or a caller, that the current code contradicts. The quote must be exact (a full line or a
-substring of one line, without the line-number prefix). Also give the line number of the faulty code.
+For "code_bug" you must quote evidence from the SOURCE FILE. "evidence" must be a verbatim quote
+of the line that states the INTENDED behavior: a doc comment, the function or parameter name,
+other code in the file, or a caller. It must NOT be the faulty code itself. The quote must be
+exact (a full line or a substring of one line, without the line-number prefix), with no
+explanation around it. Also give the line number of the faulty code in "line".
+
+Example: a loop skips the last element in a function documented as
+"Returns the average of an array of numbers."
+Then evidence is "Returns the average of an array of numbers." and line is the loop's line.
 
 Reply with JSON only:
 {"verdict": "test_wrong" | "code_bug" | "unclear", "confidence": 0.0-1.0,
