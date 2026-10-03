@@ -25,13 +25,14 @@ def cmd_run(args: argparse.Namespace) -> int:
         print("No gaps found.")
 
     if args.generate:
-        from . import generator
+        from . import generator, runlog
 
         for gap in found[: args.max_gaps]:
-            result = generator.process(gap, adapter, args.repo)
+            logger = runlog.RunLogger(args.repo, gap) if args.verbose else None
+            result = generator.process(gap, adapter, args.repo, logger)
             print(f"{gap.file} {gap.function} -> {result.status} ({result.attempts})")
-            if result.status == "suspected_bug":
-                print(f"    {result.explanation}")
+            for bug in result.bugs:
+                print(f"    BUG? {bug}")
 
     if args.report:
         print(f"note: --report not implemented yet; skipping {args.report}", file=sys.stderr)
@@ -47,6 +48,8 @@ def build_parser() -> argparse.ArgumentParser:
     run.add_argument("--base", default="main", help="branch to diff against (default: main)")
     run.add_argument("--all", action="store_true", help="treat every uncovered line as changed")
     run.add_argument("--generate", action="store_true", help="generate tests for the gaps")
+    run.add_argument("--verbose", action="store_true",
+                     help="with --generate, save specs/tests/outputs to <repo>/.testgap/runs and print per-attempt details")
     run.add_argument("--max-gaps", type=int, default=3, help="max gaps to generate for (default: 3)")
     run.add_argument("--report", metavar="FILE", help="write a report to FILE")
     run.set_defaults(func=cmd_run)

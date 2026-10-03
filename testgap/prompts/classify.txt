@@ -1,12 +1,10 @@
-A generated unit test failed. Decide which is wrong: the TEST or the CODE.
+One generated unit test failed (it is named in the message; ignore the others). Decide which is wrong: the TEST or the CODE.
 
-Judge by the function's intended behavior: its name, its doc comment, the
-other functions in the file, and how callers use it. Do not assume the
-current code is correct. A comparison like "minimum 100" normally includes
-100; check boundaries against what the name and comments promise.
+You also get a SPEC that was written without seeing the implementation.
+Judge by the function's intended behavior: the SPEC, its name, its doc
+comment, the other functions in the file, and how callers use it.
+Do not assume the current code is correct.
 
 Reply with JSON only:
 {"verdict": "test_wrong" | "code_bug", "confidence": 0.0-1.0,
- "test_name": "name of the failing test",
  "explanation": "one or two sentences"}
- 

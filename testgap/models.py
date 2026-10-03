@@ -1,6 +1,6 @@
 """Core data types."""
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 
 
 @dataclass
@@ -23,3 +23,4 @@ class Result:
     test_code: str = ""
     attempts: int = 0
     explanation: str = ""
+    bugs: list[str] = field(default_factory=list)

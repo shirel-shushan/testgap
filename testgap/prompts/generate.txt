@@ -12,4 +12,6 @@ Rules:
 - Use toBe for numbers, strings and booleans; toEqual for objects and arrays;
   toBeCloseTo for money or any floating-point result.
 - Each test checks one behavior and has a clear name.
+- Take every expected value from the SPEC you are given. Do not adjust an
+  expectation to match the code: a mismatch may be a real bug.
 - Reply with exactly one ```javascript code block and nothing else.

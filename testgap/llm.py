@@ -1,5 +1,6 @@
 """LLM client used to generate tests."""
 
+import json
 import os
 import re
 
@@ -8,6 +9,14 @@ from anthropic import Anthropic
 MODEL = os.environ.get("TESTGAP_MODEL", "claude-haiku-4-5-20251001")
 
 _client: Anthropic | None = None
+
+
+class TruncatedResponse(Exception):
+    """The model hit max_tokens before finishing; ``partial`` holds what it wrote."""
+
+    def __init__(self, partial: str = ""):
+        super().__init__("model output truncated (max_tokens reached)")
+        self.partial = partial
 
 
 def _get_client() -> Anthropic:
@@ -20,14 +29,17 @@ def _get_client() -> Anthropic:
     return _client
 
 
-def ask(system: str, user: str, max_tokens: int = 4000) -> str:
+def ask(system: str, user: str, max_tokens: int = 12000) -> str:
     response = _get_client().messages.create(
         model=MODEL,
         max_tokens=max_tokens,
         system=system,
         messages=[{"role": "user", "content": user}],
     )
-    return response.content[0].text
+    text = response.content[0].text if response.content else ""
+    if response.stop_reason == "max_tokens":
+        raise TruncatedResponse(text)
+    return text
 
 
 def extract_code(text: str) -> str:
@@ -37,6 +49,32 @@ def extract_code(text: str) -> str:
 
 
 def extract_json(text: str) -> str:
-    """First {...} block (outermost braces, greedy), else the stripped text."""
-    m = re.search(r"\{.*\}", text, re.DOTALL)
-    return m.group(0) if m else text.strip()
+    """Return the last top-level JSON object in text.
+
+    Prefers a ```json fenced block. Otherwise scans left to right, skipping
+    braces that are not valid JSON (e.g. JavaScript code), and returns the
+    last object found, preferring one that has a "verdict" key."""
+    fenced = re.findall(r"```json[ \t]*\r?\n(.*?)```", text, re.DOTALL)
+    if fenced:
+        return fenced[-1].strip()
+
+    decoder = json.JSONDecoder()
+    found = []
+    i = 0
+    while i < len(text):
+        if text[i] == "{":
+            try:
+                obj, end = decoder.raw_decode(text, i)
+            except ValueError:
+                i += 1
+                continue
+            if isinstance(obj, dict):
+                found.append(obj)
+            i = end
+        else:
+            i += 1
+
+    if not found:
+        return text.strip()
+    with_verdict = [o for o in found if "verdict" in o]
+    return json.dumps((with_verdict or found)[-1])
