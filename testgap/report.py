@@ -1,6 +1,9 @@
 """Render Results as a report."""
 
-from .models import Result
+from .models import Result, count_tests
+
+
+KEPT = ("passed", "bug_found")
 
 
 def _cell(text: str) -> str:
@@ -18,15 +21,17 @@ def render_markdown(results: list[Result]) -> str:
         lines.append("No untested changes found.")
         return "\n".join(lines) + "\n"
 
-    added = sum(1 for r in results if r.status == "passed")
+    kept = [count_tests(r.test_code) for r in results if r.status in KEPT]
+    added = sum(total for total, _ in kept)
+    skipped = sum(skip for _, skip in kept)
     bugs = sum(len(r.bugs) for r in results)
     questions = sum(len(r.questions) for r in results)
-    lines.append(f"{_count(len(results), 'function')} checked, {_count(added, 'test')} added, "
+    lines.append(f"{_count(len(results), 'function')} checked, {_count(added, 'test')} added ({skipped} skipped until the bug is fixed), "
                  f"{_count(bugs, 'bug')}, {_count(questions, 'question')}.")
     lines += ["", "| Function | Result | Attempts |", "|---|---|---|"]
     for r in results:
         name = _cell(f"{r.gap.file} / {r.gap.function}")
-        lines.append(f"| `{name}` | {_cell(r.status)} | {r.attempts} |")
+        lines.append(f"| `{name}` | {_cell(r.status.replace('_', ' '))} | {r.attempts} |")
 
     for r in results:
         fixes = {fix.get("bug"): fix for fix in r.fixes}

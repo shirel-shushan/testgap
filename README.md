@@ -74,7 +74,6 @@ Results vary between runs. The minimum-subtotal bug was found in some runs and m
 
 - JavaScript with Vitest only. The repo needs an existing test setup.
 - Results are inconsistent between runs.
-- When many tests fail for the same bug, the run can end as `gave_up` (the bug is still reported).
 - The spec can invent business rules. This is mitigated, not solved.
 
 ## Usage

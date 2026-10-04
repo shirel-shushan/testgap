@@ -269,3 +269,67 @@ def test_unclassified_failures_skipped_as_same_bug(tmp_path, monkeypatch):
     assert '"t2"' in fix_part and '"t3"' in fix_part and '"t4"' not in fix_part
     assert result.status == "passed" and len(result.bugs) == 1
     assert result.skipped_same_bug == 3
+
+
+UNCOVERED_CODE = ("```javascript\nit('a', () => {});\nit('b', () => {});\n"
+                  "it.skip('bad sum', () => {});\n```")
+
+
+class UncoveredAdapter(FakeAdapter):
+    def __init__(self):
+        super().__init__()
+        self.runs = [(False, FAIL_OUTPUT), (True, "ok")]
+
+    def uncovered_lines(self, repo): return {"src/a.js": {2}}
+
+
+def test_bug_lines_uncovered_ends_as_bug_found_and_keeps_file(tmp_path, monkeypatch):
+    _subtract_src(tmp_path)
+    fix_calls = []
+
+    def ask(system, msg, **kw):
+        if system == generator.prompts.load("classify"):
+            return json.dumps(BUG)
+        if system == generator.prompts.load("fix"):
+            fix_calls.append(msg)
+            return UNCOVERED_CODE
+        return "```javascript\ntest()\n```"
+
+    monkeypatch.setattr(generator.llm, "ask", ask)
+    result = generator.process(GAP, UncoveredAdapter(), tmp_path)
+
+    assert result.status == "bug_found" and result.attempts == 2
+    assert len(fix_calls) == 1  # no third attempt
+    assert (tmp_path / "tests" / "a.test.js").exists()
+    assert len(result.bugs) == 1
+    from testgap.models import count_tests
+    assert count_tests(result.test_code) == (3, 1)
+
+
+def test_uncovered_without_bugs_keeps_retrying(tmp_path, monkeypatch):
+    _subtract_src(tmp_path)
+    adapter = UncoveredAdapter()
+    adapter.runs = [(True, "ok")] * 3
+
+    monkeypatch.setattr(generator.llm, "ask", lambda s, m, **kw: "```javascript\ntest()\n```")
+    result = generator.process(GAP, adapter, tmp_path)
+    assert result.status == "gave_up" and result.attempts == generator.MAX_ATTEMPTS
+
+
+def test_skipped_same_bug_counts_unique_names_across_attempts(tmp_path, monkeypatch):
+    _subtract_src(tmp_path)
+    output = "".join(f" FAIL  t.test.js > add > t{i}\nAssertionError: x\n ❯ t.test.js:{i}:1\n"
+                      for i in range(1, 7))
+    adapter = FakeAdapter()
+    adapter.runs = [(False, output), (False, output), (True, "ok")]
+
+    def ask(system, msg, **kw):
+        if system == generator.prompts.load("classify"):
+            name = msg.split("Classify only this one failing test:")[1].splitlines()[0].strip()
+            return json.dumps(BUG if name == "t1" else
+                              {"verdict": "test_wrong", "confidence": 0.9, "explanation": "w"})
+        return "```javascript\ntest()\n```"
+
+    monkeypatch.setattr(generator.llm, "ask", ask)
+    result = generator.process(GAP, adapter, tmp_path)
+    assert result.skipped_same_bug == 3  # t4-t6 skipped in two attempts, counted once

@@ -13,7 +13,7 @@ def test_no_gaps():
 
 def test_one_passed_result():
     out = render_markdown([Result(GAP, "passed", "code", 2)])
-    assert "1 function checked, 1 test added, 0 bugs, 0 questions." in out
+    assert "1 function checked, 0 tests added (0 skipped until the bug is fixed), 0 bugs, 0 questions." in out
     assert "| Function | Result | Attempts |" in out
     assert "| `src/math.js / average` | passed | 2 |" in out
     assert "Suspected bug" not in out
@@ -52,7 +52,7 @@ def test_summary_plurals():
         Result(other, "passed", "code", 1),
     ]
     out = render_markdown(results)
-    assert "2 functions checked, 2 tests added, 2 bugs, 2 questions." in out
+    assert "2 functions checked, 0 tests added (0 skipped until the bug is fixed), 2 bugs, 2 questions." in out
 
 
 def test_same_bug_skips_line_under_bug():
@@ -61,3 +61,12 @@ def test_same_bug_skips_line_under_bug():
     out = render_markdown([r])
     assert "3 more tests were skipped as likely caused by the same bug." in out
     assert "more tests" not in render_markdown([Result(r.gap, "passed", bugs=["t: why"])])
+
+
+def test_tests_added_counts_cases_in_kept_file_and_bug_found_label():
+    code = ("it('a', () => {});\n"
+            "test('b', () => {});\n"
+            "it.skip('c', () => {});\n")
+    out = render_markdown([Result(GAP, "bug_found", code, 2, bugs=["x: y"])])
+    assert "3 tests added (1 skipped until the bug is fixed)" in out
+    assert "| bug found | 2 |" in out

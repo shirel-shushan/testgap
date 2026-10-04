@@ -212,7 +212,7 @@ def process(gap, adapter, repo, logger=None) -> Result:
     questions: list[tuple[str, Verdict]] = []
     seen_bugs: set = set()
     seen_questions: set = set()
-    skipped_same_bug = 0
+    skipped_same_bug: set[str] = set()
     for attempt in range(1, MAX_ATTEMPTS + 1):
         test_path.parent.mkdir(parents=True, exist_ok=True)
         test_path.write_text(code, encoding="utf-8")
@@ -226,7 +226,13 @@ def process(gap, adapter, repo, logger=None) -> Result:
             still_missing = gap.lines & adapter.uncovered_lines(repo).get(gap.file, set())
             if not still_missing:
                 return Result(gap, "passed", code, attempt, bugs=bugs, questions=_prune_questions(bug_verdicts, questions),
-                      skipped_same_bug=skipped_same_bug)
+                      skipped_same_bug=len(skipped_same_bug))
+            if bugs:
+                # The uncovered lines are the buggy ones: every test reaching them fails and
+                # is skipped, and skipped tests do not count, so more attempts cannot help.
+                return Result(gap, "bug_found", code, attempt, bugs=bugs,
+                              questions=_prune_questions(bug_verdicts, questions),
+                              skipped_same_bug=len(skipped_same_bug))
             feedback = f"Tests pass, but lines {sorted(still_missing)} are still not executed."
         else:
             all_names = failing_tests(output)
@@ -265,7 +271,7 @@ def process(gap, adapter, repo, logger=None) -> Result:
                     else:
                         fix.append(name)
                 same_bug = all_names[MAX_CLASSIFIED:] if bug_name else []
-                skipped_same_bug += len(same_bug)
+                skipped_same_bug.update(same_bug)
                 feedback = output[-3000:] + _fix_instructions(skip, fix, ask, same_bug, bug_name)
 
         try:
@@ -277,8 +283,8 @@ def process(gap, adapter, repo, logger=None) -> Result:
         except llm.TruncatedResponse:
             test_path.unlink(missing_ok=True)
             return Result(gap, "gave_up", code, attempt, "model output truncated", bugs=bugs, questions=_prune_questions(bug_verdicts, questions),
-                      skipped_same_bug=skipped_same_bug)
+                      skipped_same_bug=len(skipped_same_bug))
 
     test_path.unlink(missing_ok=True)
     return Result(gap, "gave_up", code, MAX_ATTEMPTS, bugs=bugs, questions=_prune_questions(bug_verdicts, questions),
-                      skipped_same_bug=skipped_same_bug)
+                      skipped_same_bug=len(skipped_same_bug))
