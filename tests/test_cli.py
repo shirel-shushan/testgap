@@ -43,3 +43,11 @@ def test_only_applies_to_generate(monkeypatch, capsys):
     monkeypatch.setattr(generator, "process", process)
     _run(monkeypatch, capsys, "--generate", "--only", "sub")
     assert processed == ["sub"]
+
+
+def test_report_written_without_generate(monkeypatch, capsys, tmp_path):
+    path = tmp_path / "report.md"
+    _run(monkeypatch, capsys, "--report", str(path))
+    text = path.read_text(encoding="utf-8")
+    assert "3 functions checked" in text
+    assert "| `src/a.js / sub` | not generated | 0 |" in text
