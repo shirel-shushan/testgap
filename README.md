@@ -122,5 +122,24 @@ testgap run --repo ../testgap-demo --all --generate --suggest-fixes --only isVal
 ```sh
 pytest
 ```
+## About this project
+
+I'm a fourth-year Software Engineering student at Azrieli College of Engineering
+in Jerusalem. I built testgap to learn how LLMs can be used inside the
+development process, not only to write code.
+
+I worked with Claude Code and Claude as pair programmers. I wrote the first
+versions of the diff parsing and gap detection myself (`diff.py`, `gaps.py`).
+The generation loop and the prompts were drafted with Claude and refined after
+each run. Most of the infrastructure (the Vitest adapter, the CLI, run logging)
+was generated with Claude Code and reviewed by me.
+
+The design decisions came from running the tool and reading what it produced.
+Every row in "What went wrong along the way" is a failure I saw in a real run.
+
+What I learned: An LLM response can look convincing and still be wrong. In the
+first full run, 12 of the 18 bug reports were false positives. Comparing the
+tool's reports against an answer key of deliberately planted bugs helped me
+identify these errors and understand where the tool needed improvement.
 
 All LLM calls are mocked.
