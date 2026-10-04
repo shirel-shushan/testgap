@@ -57,6 +57,15 @@ def test_source_restored_and_patched_during_run(repo):
     assert not (repo / "tests/generated/a.add.fix.test.js").exists()
 
 
+def test_indented_reply_diff_is_one_line(repo, monkeypatch):
+    reply = "    function add(a, b) {\n      return a + b;\n    }"
+    monkeypatch.setattr(fixer.llm, "ask", lambda *a, **k: "```javascript\n" + reply + "\n```")
+    res = run(repo, Adapter())
+    changed = [l for l in res["diff"].splitlines()
+               if l[:1] in "+-" and not l.startswith(("---", "+++"))]
+    assert changed == ["-  return a - b;", "+  return a + b;"]
+
+
 def test_source_restored_when_run_raises(repo):
     with pytest.raises(RuntimeError):
         run(repo, Adapter(boom=True))

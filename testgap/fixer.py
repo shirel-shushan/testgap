@@ -1,6 +1,7 @@
 """Suggest and verify a fix for a bug found in a Gap."""
 import difflib
 import re
+import textwrap
 from pathlib import Path
 
 from . import llm, prompts
@@ -16,6 +17,11 @@ def unskip_named(test_code: str, bug_text: str) -> str:
             return f"it({m['q']}{m['title']}{m['q']}"
         return m.group(0)
     return _SKIP.sub(repl, test_code)
+
+
+def _nl_terminated(lines: list[str]) -> list[str]:
+    """Ensure every line ends with a newline so difflib doesn't merge the last line with the next."""
+    return [l if l.endswith("\n") else l + "\n" for l in lines]
 
 
 def suggest_fix(gap, source, bug_text, test_code, adapter, repo) -> dict | None:
@@ -37,11 +43,17 @@ def suggest_fix(gap, source, bug_text, test_code, adapter, repo) -> dict | None:
     lines = text.splitlines(keepends=True)
     eol = "\r\n" if "\r\n" in text else "\n"
     old_fn = lines[gap.start_line - 1:gap.end_line]
-    new_fn = [line + eol for line in fixed.splitlines()]
+    indent = ""
+    if old_fn:
+        first = old_fn[0]
+        indent = first[:len(first) - len(first.lstrip())]
+    body = textwrap.dedent(fixed).splitlines()
+    new_fn = [(indent + line if line.strip() else line) + eol for line in body]
     if old_fn and new_fn and not old_fn[-1].endswith(("\n", "\r")):
         new_fn[-1] = new_fn[-1][: -len(eol)]
     patched = "".join(lines[:gap.start_line - 1] + new_fn + lines[gap.end_line:])
-    diff = "".join(difflib.unified_diff(old_fn, new_fn, f"a/{gap.file}", f"b/{gap.file}"))
+    diff = "".join(difflib.unified_diff(
+        _nl_terminated(old_fn), _nl_terminated(new_fn), f"a/{gap.file}", f"b/{gap.file}"))
 
     test_rel = adapter.test_path_for(gap.file, gap.function)
     tmp_rel = test_rel.replace(".test.js", ".fix.test.js")

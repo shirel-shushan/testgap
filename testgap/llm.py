@@ -45,7 +45,10 @@ def ask(system: str, user: str, max_tokens: int = 12000) -> str:
 def extract_code(text: str) -> str:
     """First ```javascript/js/plain fenced block, else the stripped text."""
     m = re.search(r"```(?:javascript|js)?[ \t]*\r?\n(.*?)```", text, re.DOTALL)
-    return m.group(1).strip() if m else text.strip()
+    if not m:
+        return text.strip()
+    # Drop leading blank lines and trailing whitespace, but keep the first line's indent
+    return re.sub(r"\A\s*\n", "", m.group(1)).rstrip()
 
 
 def extract_json(text: str) -> str:
