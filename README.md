@@ -31,7 +31,8 @@ flowchart TD
 5. Tests are written from the spec and run.
 6. Each failing test is classified separately as `test_wrong`, `code_bug` or `unclear`.
 7. A `code_bug` must quote evidence from a different line of the file (a doc comment, other code, a caller). The tool checks that the quote exists; otherwise the report is downgraded to a question.
-8. Optional (`--suggest-fixes`): a fix is suggested, applied to the file temporarily, verified against the generated tests and the existing suite, and the file is always restored.
+8. Once a bug is found, other failing tests from the same attempt are skipped as likely the same bug. If the buggy lines still cannot be covered, the run ends as `bug_found` and the test file is kept.
+9. Optional (`--suggest-fixes`): a fix is suggested, applied to the file temporarily, verified against the generated tests and the existing suite, and the file is always restored. Only verified fixes are shown.
 
 ## Design decisions
 
@@ -53,7 +54,7 @@ Demo repo: [github.com/shirel-shushan/testgap-demo](https://github.com/shirel-sh
 
 All results were produced with claude-haiku-4-5.
 
-One extra bug, written by hand (an off-by-one loop in `average`, on the `my-first-test` branch of testgap-demo), was found, and a fix was suggested and verified.
+On a real pull request in GitHub Actions ([testgap-demo PR #2](https://github.com/shirel-shushan/testgap-demo/pull/2)), the tool found an off-by-one bug in a new function, kept 12 tests (9 of them skipped until the bug is fixed), and posted a verified one-line fix.
 
 Results vary between runs. The minimum-subtotal bug was found in some runs and missed in others.
 
@@ -69,6 +70,10 @@ Results vary between runs. The minimum-subtotal bug was found in some runs and m
 | Truncated model output | Detect `max_tokens` and ask the model for a shorter file instead of parsing partial output |
 | JSON buried in reasoning text | Extract the last valid JSON object, preferring one with a `verdict` key |
 | The model quoted the faulty line as its own evidence | Evidence must come from a different line, and the quote is checked against the file |
+| Many tests failing for the same bug were sent to be "fixed", breaking the file | Once a bug is found, other failing tests from the same attempt are skipped as likely the same bug |
+| The buggy lines could never be covered, because every test that reaches them fails and skipped tests do not count for coverage | A new status, `bug_found`: stop once the file passes and a bug is reported; the skipped tests cover those lines after the fix |
+| A suggested fix used the wrong code block from the model's reply | Pick the block that contains the function signature; unverified fixes are not shown |
+| The model repeated the doc comment in its fix, so applying it would duplicate the comment | Drop everything before the function signature before patching |
 
 ## Limitations
 
@@ -103,7 +108,7 @@ testgap run --repo PATH [options]
 | `--only NAME[,NAME...]` | Only process gaps whose function name is in the list |
 | `--verbose` | With `--generate`, save specs, tests and outputs to `<repo>/.testgap/runs` and print per-attempt details |
 | `--suggest-fixes` | With `--generate`, suggest a fix for each bug and verify it by running the tests |
-| `--report FILE` | Write a Markdown report to `FILE`: a summary, a table of functions, suspected bugs with suggested fixes, and questions. Works with or without `--generate` |
+| `--report FILE` | Write a Markdown report to `FILE`: a summary, a table of functions, suspected bugs with verified fixes, and questions. Works with or without `--generate` |
 
 Without `--generate`, the tool only lists the gaps.
 
@@ -169,13 +174,16 @@ Setup: add the `TESTGAP_API_KEY` repository secret:
 gh secret set TESTGAP_API_KEY
 ```
 
-Example: https://github.com/shirel-shushan/testgap-demo/pull/2 — the tool found an off-by-one bug in a new function and posted a verified one-line fix.
+Example: [testgap-demo PR #2](https://github.com/shirel-shushan/testgap-demo/pull/2).
 
 ## Running the tests
 
 ```sh
 pytest
 ```
+
+All LLM calls are mocked.
+
 ## About this project
 
 I'm a fourth-year Software Engineering student at Azrieli College of Engineering
@@ -195,5 +203,3 @@ What I learned: An LLM response can look convincing and still be wrong. In the
 first full run, 12 of the 18 bug reports were false positives. Comparing the
 tool's reports against an answer key of deliberately planted bugs helped me
 identify these errors and understand where the tool needed improvement.
-
-All LLM calls are mocked.
