@@ -53,8 +53,6 @@ def cmd_run(args: argparse.Namespace) -> int:
                     for line in fix["diff"].splitlines():
                         print(f"      {line}")
 
-    if args.report:
-        print(f"note: --report not implemented yet; skipping {args.report}", file=sys.stderr)
     return 0
 
 
@@ -74,7 +72,6 @@ def build_parser() -> argparse.ArgumentParser:
     run.add_argument("--max-gaps", type=int, default=3, help="max gaps to generate for (default: 3)")
     run.add_argument("--only", metavar="NAME[,NAME...]",
                      help="only process gaps whose function name is in this comma-separated list")
-    run.add_argument("--report", metavar="FILE", help="write a report to FILE")
     run.set_defaults(func=cmd_run)
     return parser
 

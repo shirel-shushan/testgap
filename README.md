@@ -51,7 +51,9 @@ Demo repo: [github.com/shirel-shushan/testgap-demo](https://github.com/shirel-sh
 | Before evidence check | 13 | 2 of 3 | 12 | 0 |
 | With evidence check | 7 (the 3 buggy + 4 that had false reports) | 2 of 3 | 1 | 3 |
 
-One extra bug, written by hand (an off-by-one loop in `average`), was found, and a fix was suggested and verified.
+All results were produced with claude-haiku-4-5.
+
+One extra bug, written by hand (an off-by-one loop in `average`, on the `my-first-test` branch of testgap-demo), was found, and a fix was suggested and verified.
 
 Results vary between runs. The minimum-subtotal bug was found in some runs and missed in others.
 
@@ -74,7 +76,6 @@ Results vary between runs. The minimum-subtotal bug was found in some runs and m
 - Results are inconsistent between runs.
 - When many tests fail for the same bug, the run can end as `gave_up` (the bug is still reported).
 - The spec can invent business rules. This is mitigated, not solved.
-- `--report` is accepted but not implemented yet.
 
 ## Usage
 
@@ -103,14 +104,13 @@ testgap run --repo PATH [options]
 | `--only NAME[,NAME...]` | Only process gaps whose function name is in the list |
 | `--verbose` | With `--generate`, save specs, tests and outputs to `<repo>/.testgap/runs` and print per-attempt details |
 | `--suggest-fixes` | With `--generate`, suggest a fix for each bug and verify it by running the tests |
-| `--report FILE` | Not implemented yet |
 
 Without `--generate`, the tool only lists the gaps.
 
 Example:
 
 ```sh
-testgap run --repo ../testgap-demo --all --generate --suggest-fixes --only average
+testgap run --repo ../testgap-demo --all --generate --suggest-fixes --only isValidIsraeliId
 ```
 
 **Model.** The default is `claude-haiku-4-5-20251001`. Set `TESTGAP_MODEL` to use another one.
