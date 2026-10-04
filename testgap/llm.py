@@ -42,13 +42,17 @@ def ask(system: str, user: str, max_tokens: int = 12000) -> str:
     return text
 
 
+def extract_code_blocks(text: str) -> list[str]:
+    """All ```javascript/js/plain fenced blocks, in order."""
+    blocks = re.findall(r"```(?:javascript|js)?[ \t]*\r?\n(.*?)```", text, re.DOTALL)
+    # Drop leading blank lines and trailing whitespace, but keep the first line's indent
+    return [re.sub(r"\A\s*\n", "", b).rstrip() for b in blocks]
+
+
 def extract_code(text: str) -> str:
     """First ```javascript/js/plain fenced block, else the stripped text."""
-    m = re.search(r"```(?:javascript|js)?[ \t]*\r?\n(.*?)```", text, re.DOTALL)
-    if not m:
-        return text.strip()
-    # Drop leading blank lines and trailing whitespace, but keep the first line's indent
-    return re.sub(r"\A\s*\n", "", m.group(1)).rstrip()
+    blocks = extract_code_blocks(text)
+    return blocks[0] if blocks else text.strip()
 
 
 def extract_json(text: str) -> str:

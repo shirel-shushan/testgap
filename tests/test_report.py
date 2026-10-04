@@ -13,7 +13,7 @@ def test_no_gaps():
 
 def test_one_passed_result():
     out = render_markdown([Result(GAP, "passed", "code", 2)])
-    assert "1 functions checked, 1 tests added, 0 bugs, 0 questions." in out
+    assert "1 function checked, 1 test added, 0 bugs, 0 questions." in out
     assert "| Function | Result | Attempts |" in out
     assert "| `src/math.js / average` | passed | 2 |" in out
     assert "Suspected bug" not in out
@@ -25,9 +25,31 @@ def test_bug_with_verified_fix_renders_diff_block():
     result = Result(GAP, "gave_up", "code", 3, bugs=[bug], questions=["empty input?"],
                     fixes=[{"bug": bug, "diff": diff, "verified": True, "output": ""}])
     out = render_markdown([result])
-    assert "1 bugs, 1 questions" in out
+    assert "1 bug, 1 question." in out
     assert "**Suspected bug** in `src/math.js` / `average`" in out
     assert bug in out
     assert "Suggested fix (verified)" in out
     assert "```diff\n" + diff + "```" in out
     assert "- `src/math.js` / `average`: empty input?" in out
+
+
+def test_unverified_fix_hides_diff():
+    bug = "loop skips the last element"
+    diff = "--- a/src/math.js\n+++ b/src/math.js\n-  old\n+  new\n"
+    result = Result(GAP, "gave_up", "code", 3, bugs=[bug],
+                    fixes=[{"bug": bug, "diff": diff, "verified": False, "output": "fails"}])
+    out = render_markdown([result])
+    assert "A fix was attempted but failed verification." in out
+    assert "```diff" not in out
+    assert "+  new" not in out
+    assert "Suggested fix" not in out
+
+
+def test_summary_plurals():
+    other = Gap("src/math.js", "sum", 7, 9, {8})
+    results = [
+        Result(GAP, "passed", "code", 1, bugs=["a", "b"], questions=["q1", "q2"]),
+        Result(other, "passed", "code", 1),
+    ]
+    out = render_markdown(results)
+    assert "2 functions checked, 2 tests added, 2 bugs, 2 questions." in out
