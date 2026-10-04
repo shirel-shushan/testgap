@@ -53,3 +53,11 @@ def test_summary_plurals():
     ]
     out = render_markdown(results)
     assert "2 functions checked, 2 tests added, 2 bugs, 2 questions." in out
+
+
+def test_same_bug_skips_line_under_bug():
+    from testgap.models import Gap, Result
+    r = Result(Gap("a.js", "f", 1, 2, {1}), "passed", bugs=["t: why"], skipped_same_bug=3)
+    out = render_markdown([r])
+    assert "3 more tests were skipped as likely caused by the same bug." in out
+    assert "more tests" not in render_markdown([Result(r.gap, "passed", bugs=["t: why"])])

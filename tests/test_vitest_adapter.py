@@ -75,3 +75,8 @@ def test_test_path_for():
     assert VitestAdapter().test_path_for("src/pricing.js", "applyDiscount") == (
         "tests/generated/pricing.applyDiscount.test.js"
     )
+
+
+def test_coverage_command_reports_on_failure():
+    from testgap.adapters.vitest import COVERAGE_CMD
+    assert "--coverage.reportOnFailure" in COVERAGE_CMD

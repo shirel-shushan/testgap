@@ -66,6 +66,17 @@ def test_indented_reply_diff_is_one_line(repo, monkeypatch):
     assert changed == ["-  return a - b;", "+  return a + b;"]
 
 
+def test_repeated_doc_comment_is_not_duplicated(repo, monkeypatch):
+    reply = "/** Adds two numbers. */\nfunction add(a, b) {\n  return a + b;\n}"
+    monkeypatch.setattr(fixer.llm, "ask", lambda *a, **k: "```javascript\n" + reply + "\n```")
+    a = Adapter()
+    res = run(repo, a)
+    assert "Adds two numbers" not in a.seen_src
+    changed = [l for l in res["diff"].splitlines()
+               if l[:1] in "+-" and not l.startswith(("---", "+++"))]
+    assert changed == ["-  return a - b;", "+  return a + b;"]
+
+
 def test_source_restored_when_run_raises(repo):
     with pytest.raises(RuntimeError):
         run(repo, Adapter(boom=True))

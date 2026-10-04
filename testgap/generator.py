@@ -148,13 +148,18 @@ def classify(gap, source, test_code, test_name, details, spec="", logger=None) -
 
 
 def _fix_instructions(skip: list[tuple[str, str]], fix: list[str],
-                      ask: list[tuple[str, str]] | None = None) -> str:
+                      ask: list[tuple[str, str]] | None = None,
+                      same_bug: list[str] | None = None, bug_name: str = "") -> str:
     skip_list = "; ".join(f'"{name}" (explanation: {why})' for name, why in skip) or "(none)"
     ask_part = ""
     if ask:
         ask_list = "; ".join(f'"{name}" (explanation: {why})' for name, why in ask)
         ask_part = ("Also change these tests to it.skip with a comment above each: "
                     f"// testgap: question - <explanation>: {ask_list}. ")
+    if same_bug:
+        same_list = "; ".join(f'"{name}"' for name in same_bug)
+        ask_part += ("Also change these tests to it.skip with a comment above each: "
+                     f"// testgap: likely the same bug as {bug_name}: {same_list}. ")
     fix_list = "; ".join(f'"{name}"' for name in fix) or "(none)"
     return (
         "\n\nInstructions for this fix:\n"
@@ -207,6 +212,7 @@ def process(gap, adapter, repo, logger=None) -> Result:
     questions: list[tuple[str, Verdict]] = []
     seen_bugs: set = set()
     seen_questions: set = set()
+    skipped_same_bug = 0
     for attempt in range(1, MAX_ATTEMPTS + 1):
         test_path.parent.mkdir(parents=True, exist_ok=True)
         test_path.write_text(code, encoding="utf-8")
@@ -219,10 +225,12 @@ def process(gap, adapter, repo, logger=None) -> Result:
             adapter.refresh()
             still_missing = gap.lines & adapter.uncovered_lines(repo).get(gap.file, set())
             if not still_missing:
-                return Result(gap, "passed", code, attempt, bugs=bugs, questions=_prune_questions(bug_verdicts, questions))
+                return Result(gap, "passed", code, attempt, bugs=bugs, questions=_prune_questions(bug_verdicts, questions),
+                      skipped_same_bug=skipped_same_bug)
             feedback = f"Tests pass, but lines {sorted(still_missing)} are still not executed."
         else:
-            names = failing_tests(output)[:MAX_CLASSIFIED]
+            all_names = failing_tests(output)
+            names = all_names[:MAX_CLASSIFIED]
             if file_failed_to_load(output):
                 logger.load_failed()
                 feedback = ("The test file failed to load (syntax or import error), "
@@ -234,6 +242,7 @@ def process(gap, adapter, repo, logger=None) -> Result:
                 skip: list[tuple[str, str]] = []
                 ask: list[tuple[str, str]] = []
                 fix: list[str] = []
+                bug_name = ""
                 for name in names:
                     verdict = classify(gap, source, code, name, details.get(name, ""), spec, logger)
                     logger.verdict(verdict, name)
@@ -245,6 +254,7 @@ def process(gap, adapter, repo, logger=None) -> Result:
                             questions.append((entry, verdict))
                         ask.append((name, verdict.explanation))
                     elif verdict.is_code_bug:
+                        bug_name = bug_name or name
                         entry = f"{name}: {verdict.explanation}"
                         key = _dedupe_key(gap, verdict)
                         if key not in seen_bugs:
@@ -254,7 +264,9 @@ def process(gap, adapter, repo, logger=None) -> Result:
                         skip.append((name, verdict.explanation))
                     else:
                         fix.append(name)
-                feedback = output[-3000:] + _fix_instructions(skip, fix, ask)
+                same_bug = all_names[MAX_CLASSIFIED:] if bug_name else []
+                skipped_same_bug += len(same_bug)
+                feedback = output[-3000:] + _fix_instructions(skip, fix, ask, same_bug, bug_name)
 
         try:
             code = _ask_code(
@@ -264,7 +276,9 @@ def process(gap, adapter, repo, logger=None) -> Result:
             )
         except llm.TruncatedResponse:
             test_path.unlink(missing_ok=True)
-            return Result(gap, "gave_up", code, attempt, "model output truncated", bugs=bugs, questions=_prune_questions(bug_verdicts, questions))
+            return Result(gap, "gave_up", code, attempt, "model output truncated", bugs=bugs, questions=_prune_questions(bug_verdicts, questions),
+                      skipped_same_bug=skipped_same_bug)
 
     test_path.unlink(missing_ok=True)
-    return Result(gap, "gave_up", code, MAX_ATTEMPTS, bugs=bugs, questions=_prune_questions(bug_verdicts, questions))
+    return Result(gap, "gave_up", code, MAX_ATTEMPTS, bugs=bugs, questions=_prune_questions(bug_verdicts, questions),
+                      skipped_same_bug=skipped_same_bug)

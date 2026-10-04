@@ -240,3 +240,32 @@ def test_ask_raises_truncated_on_max_tokens(monkeypatch):
         assert e.partial == "half"
     else:
         raise AssertionError("expected TruncatedResponse")
+
+
+def test_unclassified_failures_skipped_as_same_bug(tmp_path, monkeypatch):
+    _subtract_src(tmp_path)
+    output = "".join(f" FAIL  t.test.js > add > t{i}\nAssertionError: x\n ❯ t.test.js:{i}:1\n"
+                      for i in range(1, 7))
+    adapter = FakeAdapter()
+    adapter.runs = [(False, output), (True, "ok")]
+    fix_msgs = []
+
+    def ask(system, msg, **kw):
+        if system == generator.prompts.load("classify"):
+            name = msg.split("Classify only this one failing test:")[1].splitlines()[0].strip()
+            return json.dumps(BUG if name == "t1" else
+                              {"verdict": "test_wrong", "confidence": 0.9, "explanation": "w"})
+        if system == generator.prompts.load("fix"):
+            fix_msgs.append(msg)
+        return "```javascript\ntest()\n```"
+
+    monkeypatch.setattr(generator.llm, "ask", ask)
+    result = generator.process(GAP, adapter, tmp_path)
+
+    instr = fix_msgs[0].split("Instructions for this fix:")[1]
+    same_part = instr.split("likely the same bug as t1:")[1].split("Fix these tests")[0]
+    fix_part = instr.split("Fix these tests that are wrong:")[1]
+    assert all(f'"t{i}"' in same_part for i in (4, 5, 6))
+    assert '"t2"' in fix_part and '"t3"' in fix_part and '"t4"' not in fix_part
+    assert result.status == "passed" and len(result.bugs) == 1
+    assert result.skipped_same_bug == 3

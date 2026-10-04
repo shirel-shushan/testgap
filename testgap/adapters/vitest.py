@@ -7,7 +7,8 @@ from pathlib import Path, PurePosixPath
 
 from .base import CoverageAdapter
 
-COVERAGE_CMD = ["npx", "vitest", "run", "--coverage", "--coverage.reporter=json"]
+COVERAGE_CMD = ["npx", "vitest", "run", "--coverage", "--coverage.reporter=json",
+               "--coverage.reportOnFailure"]
 COVERAGE_FILE = Path("coverage") / "coverage-final.json"
 TIMEOUT = 300
 

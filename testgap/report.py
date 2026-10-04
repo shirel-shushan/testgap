@@ -30,8 +30,10 @@ def render_markdown(results: list[Result]) -> str:
 
     for r in results:
         fixes = {fix.get("bug"): fix for fix in r.fixes}
-        for bug in r.bugs:
+        for i, bug in enumerate(r.bugs):
             lines += ["", f"**Suspected bug** in `{r.gap.file}` / `{r.gap.function}`", "", bug]
+            if i == 0 and r.skipped_same_bug:
+                lines += ["", f"{r.skipped_same_bug} more tests were skipped as likely caused by the same bug."]
             fix = fixes.get(bug)
             if fix and fix["verified"]:
                 lines += ["", "Suggested fix (verified):", "", "```diff",

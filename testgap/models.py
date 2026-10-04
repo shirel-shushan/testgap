@@ -26,3 +26,4 @@ class Result:
     bugs: list[str] = field(default_factory=list)
     questions: list[str] = field(default_factory=list)
     fixes: list[dict] = field(default_factory=list)
+    skipped_same_bug: int = 0

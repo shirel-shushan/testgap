@@ -24,13 +24,27 @@ def _nl_terminated(lines: list[str]) -> list[str]:
     return [l if l.endswith("\n") else l + "\n" for l in lines]
 
 
+def _signature(function: str) -> re.Pattern:
+    name = re.escape(function)
+    return re.compile(rf"\bfunction\s*\*?\s*{name}\b|\b{name}\s*=(?![=>])")
+
+
+def drop_before_signature(code: str, function: str) -> str:
+    """Drop lines above the one holding the signature, e.g. a doc comment the original already has."""
+    sig = _signature(function)
+    lines = code.splitlines()
+    for i, line in enumerate(lines):
+        if sig.search(line):
+            return "\n".join(lines[i:])
+    return code
+
+
 def pick_fix_block(reply: str, function: str) -> str:
     """The fenced block that defines `function` ("function name" or "name ="), else the last one."""
     blocks = llm.extract_code_blocks(reply)
     if not blocks:
         return reply.strip()
-    name = re.escape(function)
-    sig = re.compile(rf"\bfunction\s*\*?\s*{name}\b|\b{name}\s*=(?![=>])")
+    sig = _signature(function)
     for block in blocks:
         if sig.search(block):
             return block
@@ -45,7 +59,8 @@ def suggest_fix(gap, source, bug_text, test_code, adapter, repo) -> dict | None:
         f"Failing test file:\n```javascript\n{test_code}\n```\n"
     )
     try:
-        fixed = pick_fix_block(llm.ask(prompts.load("suggest_fix"), msg), gap.function)
+        fixed = drop_before_signature(
+            pick_fix_block(llm.ask(prompts.load("suggest_fix"), msg), gap.function), gap.function)
     except llm.TruncatedResponse:
         return None
 
