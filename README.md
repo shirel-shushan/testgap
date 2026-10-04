@@ -118,6 +118,60 @@ testgap run --repo ../testgap-demo --all --generate --suggest-fixes --only isVal
 
 **Cost.** A run on one function costs a few cents with the default model.
 
+## Run on every pull request
+
+testgap can run in GitHub Actions on every pull request and post its report as a PR comment.
+
+Add this workflow to the JavaScript repo as `.github/workflows/testgap.yml`:
+
+```yaml
+name: testgap
+on: pull_request
+
+permissions:
+  contents: read
+  pull-requests: write
+
+jobs:
+  testgap:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - run: npm ci
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - run: pip install git+https://github.com/shirel-shushan/testgap.git
+
+      - name: Run testgap
+        run: >
+          testgap run --repo . --base origin/${{ github.base_ref }}
+          --generate --suggest-fixes --max-gaps 3 --report report.md
+        env:
+          TESTGAP_API_KEY: ${{ secrets.TESTGAP_API_KEY }}
+
+      - name: Comment on the PR
+        if: always() && hashFiles('report.md') != ''
+        run: gh pr comment ${{ github.event.pull_request.number }} --body-file report.md
+        env:
+          GH_TOKEN: ${{ github.token }}
+```
+
+Setup: add the `TESTGAP_API_KEY` repository secret:
+
+```sh
+gh secret set TESTGAP_API_KEY
+```
+
+Example: https://github.com/shirel-shushan/testgap-demo/pull/2 — the tool found an off-by-one bug in a new function and posted a verified one-line fix.
+
 ## Running the tests
 
 ```sh
