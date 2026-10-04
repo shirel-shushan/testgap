@@ -104,6 +104,7 @@ testgap run --repo PATH [options]
 | `--only NAME[,NAME...]` | Only process gaps whose function name is in the list |
 | `--verbose` | With `--generate`, save specs, tests and outputs to `<repo>/.testgap/runs` and print per-attempt details |
 | `--suggest-fixes` | With `--generate`, suggest a fix for each bug and verify it by running the tests |
+| `--report FILE` | Write a Markdown report to `FILE`: a summary, a table of functions, suspected bugs with suggested fixes, and questions. Works with or without `--generate` |
 
 Without `--generate`, the tool only lists the gaps.
 

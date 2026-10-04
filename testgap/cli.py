@@ -6,6 +6,7 @@ from pathlib import Path
 
 from . import diff, gaps
 from .adapters import VitestAdapter
+from .models import Result
 
 
 def cmd_run(args: argparse.Namespace) -> int:
@@ -28,12 +29,14 @@ def cmd_run(args: argparse.Namespace) -> int:
     if not found:
         print("No gaps found.")
 
+    results = []
     if args.generate:
         from . import generator, runlog
 
         for gap in found[: args.max_gaps]:
             logger = runlog.RunLogger(args.repo, gap) if args.verbose else None
             result = generator.process(gap, adapter, args.repo, logger)
+            results.append(result)
             print(f"{gap.file} {gap.function} -> {result.status} ({result.attempts})")
             for bug in result.bugs:
                 print(f"    BUG? {bug}")
@@ -52,6 +55,14 @@ def cmd_run(args: argparse.Namespace) -> int:
                     print(f"    FIX ({label}):")
                     for line in fix["diff"].splitlines():
                         print(f"      {line}")
+
+    if args.report:
+        from . import report
+
+        done = {id(r.gap) for r in results}
+        results += [Result(gap, "not generated") for gap in found if id(gap) not in done]
+        Path(args.report).write_text(report.render_markdown(results), encoding="utf-8")
+        print(f"Report written to {args.report}")
 
     return 0
 
@@ -72,6 +83,8 @@ def build_parser() -> argparse.ArgumentParser:
     run.add_argument("--max-gaps", type=int, default=3, help="max gaps to generate for (default: 3)")
     run.add_argument("--only", metavar="NAME[,NAME...]",
                      help="only process gaps whose function name is in this comma-separated list")
+    run.add_argument("--report", metavar="FILE",
+                     help="write a Markdown report to FILE (with or without --generate)")
     run.set_defaults(func=cmd_run)
     return parser
 
