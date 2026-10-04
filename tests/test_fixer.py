@@ -96,3 +96,30 @@ def test_truncated_returns_none(repo, monkeypatch):
     def ask(*a, **k): raise fixer.llm.TruncatedResponse("x")
     monkeypatch.setattr(fixer.llm, "ask", ask)
     assert run(repo, Adapter()) is None
+
+
+def test_picks_block_with_signature_over_quoted_line(repo, monkeypatch):
+    reply = (
+        "The buggy line is:\n\n```javascript\n  return a - b;\n```\n\n"
+        "Here is the fixed function:\n\n"
+        "```javascript\nfunction add(a, b) {\n  return a + b;\n}\n```\n"
+    )
+    monkeypatch.setattr(fixer.llm, "ask", lambda *a, **k: reply)
+    a = Adapter()
+    res = run(repo, a)
+    assert "function add(a, b) {\n  return a + b;\n}" in a.seen_src
+    assert a.seen_src.count("function add") == 1
+    changed = [l for l in res["diff"].splitlines()
+               if l[:1] in "+-" and not l.startswith(("---", "+++"))]
+    assert changed == ["-  return a - b;", "+  return a + b;"]
+
+
+@pytest.mark.parametrize("reply,expected", [
+    ("```js\nfoo();\n```\n```js\nconst add = (a, b) => a + b;\n```\n```js\nbar();\n```",
+     "const add = (a, b) => a + b;"),
+    ("```js\nif (add == 1) x();\n```\n```js\nlast();\n```", "last();"),
+    ("```js\nfirst();\n```\n```js\nlast();\n```", "last();"),
+    ("no fences here", "no fences here"),
+])
+def test_pick_fix_block(reply, expected):
+    assert fixer.pick_fix_block(reply, "add") == expected

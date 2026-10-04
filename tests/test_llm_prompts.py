@@ -2,7 +2,7 @@ import pytest
 
 from testgap import prompts
 from testgap.adapters import VitestAdapter
-from testgap.llm import extract_code, extract_json
+from testgap.llm import extract_code, extract_code_blocks, extract_json
 from testgap.models import Gap
 
 BS = chr(92)
@@ -71,3 +71,9 @@ def test_fix_msg():
 def test_load_prompts():
     assert prompts.load("generate") is not None
     assert prompts.load("fix") is not None
+
+
+def test_extract_code_blocks():
+    text = "a\n```js\n  x\n```\nb\n```\n\ny\n```\n```python\nz\n```"
+    assert extract_code_blocks(text) == ["  x", "y"]
+    assert extract_code_blocks("no code") == []

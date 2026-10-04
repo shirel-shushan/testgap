@@ -24,6 +24,19 @@ def _nl_terminated(lines: list[str]) -> list[str]:
     return [l if l.endswith("\n") else l + "\n" for l in lines]
 
 
+def pick_fix_block(reply: str, function: str) -> str:
+    """The fenced block that defines `function` ("function name" or "name ="), else the last one."""
+    blocks = llm.extract_code_blocks(reply)
+    if not blocks:
+        return reply.strip()
+    name = re.escape(function)
+    sig = re.compile(rf"\bfunction\s*\*?\s*{name}\b|\b{name}\s*=(?![=>])")
+    for block in blocks:
+        if sig.search(block):
+            return block
+    return blocks[-1]
+
+
 def suggest_fix(gap, source, bug_text, test_code, adapter, repo) -> dict | None:
     msg = (
         f"Source file: {gap.file}\n```javascript\n{_numbered(source)}\n```\n\n"
@@ -32,7 +45,7 @@ def suggest_fix(gap, source, bug_text, test_code, adapter, repo) -> dict | None:
         f"Failing test file:\n```javascript\n{test_code}\n```\n"
     )
     try:
-        fixed = llm.extract_code(llm.ask(prompts.load("suggest_fix"), msg))
+        fixed = pick_fix_block(llm.ask(prompts.load("suggest_fix"), msg), gap.function)
     except llm.TruncatedResponse:
         return None
 
